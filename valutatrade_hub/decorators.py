@@ -16,12 +16,6 @@ _FIELD_ORDER = ("user_id", "username", "currency_code", "amount", "rate", "base"
 
 
 def _format_field(name: str, value: Any) -> str:
-    """Отформатировать одно поле лога.
-
-    Строки — в одинарных кавычках, числа — как есть.
-    Для amount/rate/balance — 4 знака после запятой,
-    как в примерах ТЗ (amount=0.0500, rate=59300.00).
-    """
     if isinstance(value, str):
         return f"{name}='{value}'"
     if name in ("amount", "rate", "before", "after"):
@@ -30,12 +24,6 @@ def _format_field(name: str, value: Any) -> str:
 
 
 def log_action(action: str, verbose: bool = False) -> Callable:
-    """Декоратор для логирования доменных операций.
-
-    :param action: метка операции (BUY/SELL/REGISTER/LOGIN).
-    :param verbose: если True — добавляет контекст «было→стало»,
-        если декорируемая функция вернула dict с ключами before/after.
-    """
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)

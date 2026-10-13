@@ -1,4 +1,4 @@
-"""Иерархия валют: базовый класс Currency и наследники Fiat/Crypto."""
+"""Иерархия валют: базовый класс Currency и наследники Fiat/Crypto"""
 
 from abc import ABC, abstractmethod
 
@@ -6,13 +6,6 @@ from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 
 
 class Currency(ABC):
-    """Абстрактный базовый класс валюты.
-
-    Атрибуты:
-        name: Человекочитаемое имя валюты.
-        code: ISO-код или тикер в верхнем регистре (2–5 символов).
-    """
-
     def __init__(self, name: str, code: str) -> None:
         if not isinstance(name, str) or not name.strip():
             raise ValueError("Название валюты не может быть пустым")
@@ -28,12 +21,6 @@ class Currency(ABC):
 
 
 class FiatCurrency(Currency):
-    """Фиатная валюта.
-
-    Доп. атрибут:
-        issuing_country: Страна или зона эмиссии.
-    """
-
     def __init__(self, name: str, code: str, issuing_country: str) -> None:
         super().__init__(name=name, code=code)
         if not isinstance(issuing_country, str) or not issuing_country.strip():
@@ -45,13 +32,6 @@ class FiatCurrency(Currency):
 
 
 class CryptoCurrency(Currency):
-    """Криптовалюта.
-
-    Доп. атрибуты:
-        algorithm: Алгоритм консенсуса.
-        market_cap: Последняя известная капитализация.
-    """
-
     def __init__(self, name: str, code: str, algorithm: str, market_cap: float) -> None:
         super().__init__(name=name, code=code)
         if not isinstance(algorithm, str) or not algorithm.strip():
@@ -79,14 +59,6 @@ _CURRENCIES: dict[str, Currency] = {
 
 
 def get_currency(code: str) -> Currency:
-    """Возвращает объект валюты по коду.
-
-    Args:
-        code: Код валюты (регистр не важен).
-
-    Raises:
-        CurrencyNotFoundError: если код неизвестен.
-    """
     if not isinstance(code, str):
         raise CurrencyNotFoundError(f"Неизвестная валюта '{code}'")
     normalized = code.strip().upper()

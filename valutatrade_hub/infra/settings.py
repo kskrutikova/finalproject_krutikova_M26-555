@@ -1,5 +1,4 @@
-"""Конфигурация проекта: Singleton SettingsLoader (ТЗ, п. 3.3).
-
+"""Конфигурация проекта: Singleton SettingsLoader (п. 3.3).
 Загружает параметры из секции [tool.valutatrade] в pyproject.toml.
 """
 
@@ -15,17 +14,10 @@ _PYPROJECT_PATH = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
 
 class SettingsLoader:
-    """Singleton-загрузчик конфигурации проекта.
-
-    Гарантирует, что в приложении существует ровно один экземпляр.
-    Способ реализации — через __new__: он проще и читабельнее метакласса,
-    а для нашей задачи (один класс-синглтон) этого достаточно.
-    """
-
     _instance: SettingsLoader | None = None
 
     def __new__(cls) -> SettingsLoader:
-        # Если экземпляр уже создан — возвращаем его,
+        # Если экземпляр уже создан - возвращаем его,
         # повторной инициализации не будет.
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -35,12 +27,10 @@ class SettingsLoader:
         return cls._instance
 
     def reload(self) -> None:
-        """Перезагрузить конфигурацию из pyproject.toml."""
         with _PYPROJECT_PATH.open("rb") as f:
             data = tomllib.load(f)
         self._config = data.get("tool", {}).get("valutatrade", {})
         self._loaded = True
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Получить значение параметра конфигурации по ключу."""
         return self._config.get(key, default)

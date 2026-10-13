@@ -1,4 +1,4 @@
-"""Модели предметной области: User, Wallet, Portfolio."""
+"""Модели предметной области: User, Wallet, Portfolio"""
 
 import hashlib
 import secrets
@@ -9,7 +9,7 @@ from valutatrade_hub.core.exceptions import (
     InsufficientFundsError,
 )
 
-# Фиксированные курсы-заглушка (ТЗ, раздел 2.1: «для упрощения можно задать
+# Фиксированные курсы-заглушка (раздел 2.1: «для упрощения можно задать
 # фиксированные курсы в словаре exchange_rates»). Ключ — пара <CODE>_USD.
 # Используется методом Portfolio.get_total_value(), если rates не передан.
 EXCHANGE_RATES: dict[str, float] = {
@@ -23,16 +23,6 @@ EXCHANGE_RATES: dict[str, float] = {
 
 
 class User:
-    """Пользователь системы.
-
-    Атрибуты (приватные):
-        _user_id: Уникальный идентификатор.
-        _username: Имя пользователя.
-        _hashed_password: Хеш пароля (SHA-256 с солью).
-        _salt: Уникальная соль пользователя.
-        _registration_date: Дата регистрации.
-    """
-
     def __init__(
         self,
         user_id: int,
@@ -51,12 +41,10 @@ class User:
 
     @property
     def user_id(self) -> int:
-        """Идентификатор пользователя."""
         return self._user_id
 
     @property
     def username(self) -> str:
-        """Имя пользователя."""
         return self._username
 
     @username.setter
@@ -67,36 +55,26 @@ class User:
 
     @property
     def salt(self) -> str:
-        """Соль пользователя."""
         return self._salt
 
     @property
     def registration_date(self) -> datetime:
-        """Дата регистрации."""
         return self._registration_date
 
     @staticmethod
     def _hash_password(password: str, salt: str) -> str:
-        """Считает SHA-256 хеш от (password + salt)."""
         return hashlib.sha256((password + salt).encode("utf-8")).hexdigest()
 
     def verify_password(self, password: str) -> bool:
-        """Проверяет, совпадает ли пароль с сохранённым хешем."""
         return self._hash_password(password, self._salt) == self._hashed_password
 
     def change_password(self, new_password: str) -> None:
-        """Меняет пароль, перегенерируя соль.
-
-        Raises:
-            ValueError: если пароль короче 4 символов.
-        """
         if not isinstance(new_password, str) or len(new_password) < 4:
             raise ValueError("Пароль должен быть не короче 4 символов")
         self._salt = secrets.token_hex(8)
         self._hashed_password = self._hash_password(new_password, self._salt)
 
     def get_user_info(self) -> dict:
-        """Возвращает информацию о пользователе без пароля и соли."""
         return {
             "user_id": self._user_id,
             "username": self._username,
@@ -104,7 +82,6 @@ class User:
         }
 
     def to_dict(self) -> dict:
-        """Сериализация в формат users.json (см. ТЗ, раздел 2.1)."""
         return {
             "user_id": self._user_id,
             "username": self._username,
@@ -115,7 +92,6 @@ class User:
 
     @classmethod
     def from_dict(cls, data: dict) -> "User":
-        """Восстанавливает объект User из словаря users.json."""
         return cls(
             user_id=data["user_id"],
             username=data["username"],
@@ -126,10 +102,6 @@ class User:
 
     @classmethod
     def create(cls, user_id: int, username: str, password: str) -> "User":
-        """Создать нового пользователя: сгенерировать соль и хеш пароля.
-
-        По ТЗ 2.2: пароль не короче 4 символов, username не пуст.
-        """
         if not isinstance(password, str) or len(password) < 4:
             raise ValueError("Пароль должен быть не короче 4 символов")
         salt = secrets.token_hex(8)
@@ -144,13 +116,6 @@ class User:
 
 
 class Wallet:
-    """Кошелёк пользователя для одной конкретной валюты.
-
-    Атрибуты:
-        currency_code: Код валюты (например, "USD", "BTC").
-        _balance: Баланс в данной валюте.
-    """
-
     def __init__(self, currency_code: str, balance: float = 0.0) -> None:
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValueError("Код валюты не может быть пустым")
@@ -160,7 +125,6 @@ class Wallet:
 
     @property
     def balance(self) -> float:
-        """Текущий баланс кошелька."""
         return self._balance
 
     @balance.setter
@@ -172,11 +136,6 @@ class Wallet:
         self._balance = float(value)
 
     def deposit(self, amount: float) -> None:
-        """Пополняет баланс.
-
-        Raises:
-            ValueError: если amount не положительное число.
-        """
         if not isinstance(amount, (int, float)) or isinstance(amount, bool):
             raise ValueError("'amount' должен быть числом")
         if amount <= 0:
@@ -184,34 +143,25 @@ class Wallet:
         self._balance += float(amount)
 
     def withdraw(self, amount: float) -> None:
-        """Снимает средства со счёта.
-
-        Raises:
-            ValueError: если amount не положительное число.
-            InsufficientFundsError: если на балансе недостаточно средств.
-        """
         if not isinstance(amount, (int, float)) or isinstance(amount, bool):
             raise ValueError("'amount' должен быть числом")
         if amount <= 0:
             raise ValueError("'amount' должен быть положительным числом")
         if amount > self._balance:
             raise InsufficientFundsError(
-                f"Недостаточно средств: доступно {self._balance} "
-                f"{self.currency_code}, требуется {amount} {self.currency_code}"
+                f"Недостаточно средств: доступно {self._balance:.4f} "
+                f"{self.currency_code}, требуется {amount:.4f} {self.currency_code}"
             )
         self._balance -= float(amount)
 
     def get_balance_info(self) -> str:
-        """Строковое представление баланса."""
         return f"{self.currency_code}: {self._balance}"
 
     def to_dict(self) -> dict:
-        """Сериализация для portfolios.json (см. ТЗ, раздел 2.1)."""
         return {"currency_code": self.currency_code, "balance": self._balance}
 
     @classmethod
     def from_dict(cls, data: dict) -> "Wallet":
-        """Восстанавливает Wallet из словаря."""
         return cls(
             currency_code=data["currency_code"],
             balance=data["balance"],
@@ -219,14 +169,6 @@ class Wallet:
 
 
 class Portfolio:
-    """Набор кошельков одного пользователя.
-
-    Атрибуты:
-        _user_id: Идентификатор владельца.
-        _wallets: Словарь кошельков {код: Wallet}.
-        _user: Опциональная ссылка на объект User (без сеттера).
-    """
-
     def __init__(
         self,
         user_id: int,
@@ -239,25 +181,17 @@ class Portfolio:
 
     @property
     def user(self) -> User | None:
-        """Объект пользователя (только для чтения)."""
         return self._user
 
     @property
     def wallets(self) -> dict[str, Wallet]:
-        """Копия словаря кошельков (только для чтения)."""
         return dict(self._wallets)
 
     @property
     def user_id(self) -> int:
-        """Идентификатор владельца портфеля."""
         return self._user_id
 
     def add_currency(self, currency_code: str) -> Wallet:
-        """Добавляет кошелёк, если его ещё нет.
-
-        Returns:
-            Существующий или только что созданный Wallet.
-        """
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValueError("Код валюты не может быть пустым")
         code = currency_code.strip().upper()
@@ -266,7 +200,6 @@ class Portfolio:
         return self._wallets[code]
 
     def get_wallet(self, currency_code: str) -> Wallet | None:
-        """Возвращает кошелёк по коду или None."""
         if not isinstance(currency_code, str):
             return None
         return self._wallets.get(currency_code.strip().upper())
@@ -276,19 +209,6 @@ class Portfolio:
         base_currency: str = "USD",
         rates: dict[str, float] | None = None,
     ) -> float:
-        """Общая стоимость портфеля в base_currency.
-
-        Конвертация идёт через USD (пары вида <CODE>_USD).
-        Если rates не передан — используется фиксированный EXCHANGE_RATES.
-
-        Args:
-            base_currency: Код базовой валюты (по умолчанию "USD").
-            rates: Словарь курсов вида {"BTC_USD": 59337.21, ...}.
-
-        Raises:
-            CurrencyNotFoundError: если для какой-то валюты нет курса
-                к USD (или базовой валюте).
-        """
         effective_rates = rates if rates is not None else EXCHANGE_RATES
         base = base_currency.strip().upper()
 
@@ -316,7 +236,6 @@ class Portfolio:
         return total
 
     def to_dict(self) -> dict:
-        """Сериализация для portfolios.json (см. ТЗ, раздел 2.1)."""
         return {
             "user_id": self._user_id,
             "wallets": {code: w.to_dict() for code, w in self._wallets.items()},
@@ -324,7 +243,6 @@ class Portfolio:
 
     @classmethod
     def from_dict(cls, data: dict, user: User | None = None) -> "Portfolio":
-        """Восстанавливает Portfolio из словаря."""
         wallets = {
             code: Wallet.from_dict(w_data) for code, w_data in data.get("wallets", {}).items()
         }

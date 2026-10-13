@@ -1,8 +1,4 @@
-"""Бизнес-логика: usecases (ТЗ, п. 2.2, 3.5).
-
-Usecases не хранят состояние сессии. Кто залогинен — знает CLI,
-он передаёт user_id явно (ответ преподавателя).
-"""
+"""Бизнес-логика: usecases (п. 2.2, 3.5)."""
 
 from __future__ import annotations
 
@@ -65,11 +61,6 @@ def _save_portfolio_record(record: dict) -> None:
 
 
 def _load_or_refresh_rates() -> dict[str, Any]:
-    """Прочитать rates.json; если кеш устарел — обновить из заглушки.
-
-    По ТЗ 3.5: TTL берём из SettingsLoader.
-    По ТЗ 2.2: если кеш устарел — обновить (заглушка разрешена).
-    """
     db = DatabaseManager()
     ttl = SettingsLoader().get("rates_ttl_seconds", 300)
     cached = db.read(_RATES_FILE, default=None)
@@ -158,10 +149,7 @@ def register(username: str, password: str) -> User:
 
 
 def login(username: str, password: str) -> User:
-    """Проверить имя и пароль. Вернуть User или бросить ValueError.
-
-    Состояние не хранит — сессию ведёт CLI (ответ преподавателя).
-    """
+    """Проверить имя и пароль. Вернуть User или бросить ValueError"""
     users = _read_users()
     record = next((u for u in users if u.get("username") == username), None)
     if record is None:
@@ -181,10 +169,8 @@ def show_portfolio(
     username: str,
     base_currency: str = _DEFAULT_BASE,
 ) -> dict[str, Any]:
-    """Собрать данные портфеля для печати (ТЗ 2.2).
-
+    """Собрать данные портфеля для печати (раздел 2.2).
     Печать — в CLI. Здесь только данные.
-    Если base неизвестна — get_currency бросит CurrencyNotFoundError.
     """
     get_currency(base_currency)
 
@@ -228,9 +214,8 @@ def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float
 
 @log_action(action="BUY", verbose=True)
 def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
-    """Купить валюту (упрощённая модель, Ответ 2).
-
-    Кошелёк создаётся при отсутствии. USD не списываем.
+    """Купить валюту (упрощенная модель)
+    Кошелек создаётся при отсутствии. USD не списываем.
     """
     code = validate_currency_code(currency_code)
     value = validate_amount(amount)
@@ -260,7 +245,7 @@ def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
 
 @log_action(action="SELL", verbose=True)
 def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
-    """Продать валюту. Проверить кошелёк и достаточность средств."""
+    """Продать валюту. Проверить кошелек и достаточность средств."""
     code = validate_currency_code(currency_code)
     value = validate_amount(amount)
     get_currency(code)
@@ -274,7 +259,7 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
         )
 
     before = wallet.balance
-    wallet.withdraw(value)  # бросит InsufficientFundsError при нехватке
+    wallet.withdraw(value)
     after = wallet.balance
 
     _save_portfolio_record(portfolio.to_dict())
@@ -289,9 +274,6 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
         "after": after,
         "estimated_value": value * rate,
     }
-
-
-# ----- get-rate -----
 
 
 def get_rate(from_code: str, to_code: str) -> dict[str, Any]:

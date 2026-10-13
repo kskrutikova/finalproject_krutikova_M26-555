@@ -1,9 +1,4 @@
-"""Настройка логирования (ТЗ, п. 3.4).
-
-Формат: строковый.
-Ротация: по размеру (1 МБ, 3 бэкапа).
-Пишем только в файл logs/actions.log; консоль оставляет CLI.
-"""
+"""Настройка логирования (п. 3.4)"""
 
 from __future__ import annotations
 
@@ -23,16 +18,11 @@ _BACKUP_COUNT = 3
 
 
 def setup_logging() -> logging.Logger:
-    """Настроить и вернуть логгер доменных операций.
-
-    Идемпотентна: повторный вызов не добавляет второй handler.
-    Путь к каталогу логов берётся из SettingsLoader (ключ log_dir).
-    """
     logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-    # Идемпотентность: если handler уже добавлен — не дублируем.
+    # Идемпотентность: если handler уже добавлен - не дублируем.
     if logger.handlers:
         return logger
 
