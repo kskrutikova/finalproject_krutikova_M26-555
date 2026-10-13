@@ -2,7 +2,7 @@
 
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 
 from valutatrade_hub.core.exceptions import (
     CurrencyNotFoundError,
@@ -122,6 +122,24 @@ class User:
             hashed_password=data["hashed_password"],
             salt=data["salt"],
             registration_date=datetime.fromisoformat(data["registration_date"]),
+        )
+
+    @classmethod
+    def create(cls, user_id: int, username: str, password: str) -> "User":
+        """Создать нового пользователя: сгенерировать соль и хеш пароля.
+
+        По ТЗ 2.2: пароль не короче 4 символов, username не пуст.
+        """
+        if not isinstance(password, str) or len(password) < 4:
+            raise ValueError("Пароль должен быть не короче 4 символов")
+        salt = secrets.token_hex(8)
+        hashed = cls._hash_password(password, salt)
+        return cls(
+            user_id=user_id,
+            username=username,
+            hashed_password=hashed,
+            salt=salt,
+            registration_date=datetime.now(UTC),
         )
 
 
