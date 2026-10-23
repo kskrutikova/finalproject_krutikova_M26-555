@@ -171,7 +171,11 @@ def _cmd_buy(args: list[str]) -> None:
         return
 
     try:
-        result = usecases.buy(_current_user.user_id, currency, float(amount))
+        result = usecases.buy(
+            user_id=_current_user.user_id,
+            currency_code=currency,
+            amount=amount,
+        )
     except ValueError as exc:
         print(exc)
         return
@@ -209,7 +213,11 @@ def _cmd_sell(args: list[str]) -> None:
         return
 
     try:
-        result = usecases.sell(_current_user.user_id, currency, float(amount))
+        result = usecases.sell(
+            user_id=_current_user.user_id,
+            currency_code=currency,
+            amount=amount,
+        )
     except ValueError as exc:
         print(exc)
         return

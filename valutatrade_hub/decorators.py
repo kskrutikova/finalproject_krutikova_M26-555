@@ -16,15 +16,22 @@ _FIELD_ORDER = ("user_id", "username", "currency_code", "amount", "rate", "base"
 
 
 def _format_field(name: str, value: Any) -> str:
+    if name == "amount":
+        try:
+            return f"{name}={float(value):.4f}"
+        except (TypeError, ValueError):
+            return f"{name}='{value}'"
+
     if isinstance(value, str):
         return f"{name}='{value}'"
-    if name in ("amount", "rate", "before", "after"):
+
+    if name in ("rate", "before", "after"):
         return f"{name}={value:.4f}"
+
     return f"{name}={value}"
 
 
 def log_action(action: str, verbose: bool = False) -> Callable:
-
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -46,11 +53,15 @@ def log_action(action: str, verbose: bool = False) -> Callable:
 
             parts.append("result=OK")
 
-            # verbose: если функция вернула before/after — добавляем контекст.
-            # verbose: если функция вернула before/after — добавляем контекст.
-            if verbose and isinstance(result, dict) and "before" in result and "after" in result:
-                parts.append(_format_field("before", result["before"]))
-                parts.append(_format_field("after", result["after"]))
+            if isinstance(result, dict):
+                if "rate" in result:
+                    parts.append(_format_field("rate", result["rate"]))
+                if "base" in result:
+                    parts.append(_format_field("base", result["base"]))
+
+                if verbose and "before" in result and "after" in result:
+                    parts.append(_format_field("before", result["before"]))
+                    parts.append(_format_field("after", result["after"]))
 
             logger.info(" ".join(parts))
             return result
