@@ -103,7 +103,7 @@ class ExchangeRateApiClient(BaseApiClient):
                 f"ExchangeRate-API вернул ошибку: {data.get('error-type', 'unknown')}"
             )
 
-        api_rates = data.get("rates", {})
+        api_rates = data.get("conversion_rates", {})
         rates: dict[str, float] = {}
 
         for code in self._config.FIAT_CURRENCIES:
