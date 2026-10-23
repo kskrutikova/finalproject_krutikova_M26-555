@@ -146,8 +146,11 @@ def _cmd_show_portfolio(args: list[str]) -> None:
         return
 
     print(f"Портфель пользователя '{data['username']}' (база: {data['base']}):")
+
     if not data["wallets"]:
-        print("(пусто)")
+        print("Портфель пуст: кошельки появятся после первой покупки.")
+        return
+
     for w in data["wallets"]:
         print(
             f"- {w['currency_code']}: {_fmt_balance(w['balance'])}  "

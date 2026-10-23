@@ -221,6 +221,8 @@ def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     value = validate_amount(amount)
     get_currency(code)
 
+    rate, _ = _get_rate_value(code, _DEFAULT_BASE)
+
     record = _find_portfolio_record(user_id)
     portfolio = Portfolio.from_dict(record)
     wallet = portfolio.add_currency(code)
@@ -230,8 +232,6 @@ def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
 
     record = portfolio.to_dict()
     _save_portfolio_record(record)
-
-    rate, _ = _get_rate_value(code, _DEFAULT_BASE)
     return {
         "currency_code": code,
         "amount": value,
@@ -250,6 +250,8 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     value = validate_amount(amount)
     get_currency(code)
 
+    rate, _ = _get_rate_value(code, _DEFAULT_BASE)
+
     record = _find_portfolio_record(user_id)
     portfolio = Portfolio.from_dict(record)
     wallet = portfolio.get_wallet(code)
@@ -264,8 +266,6 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     after = wallet.balance
 
     _save_portfolio_record(portfolio.to_dict())
-
-    rate, _ = _get_rate_value(code, _DEFAULT_BASE)
     return {
         "currency_code": code,
         "amount": value,
