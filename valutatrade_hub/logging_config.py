@@ -41,3 +41,31 @@ def setup_logging() -> logging.Logger:
     logger.addHandler(handler)
 
     return logger
+
+
+PARSER_LOGGER_NAME = "valutatrade_hub.parser"
+
+
+def setup_parser_logging() -> logging.Logger:
+    logger = logging.getLogger(PARSER_LOGGER_NAME)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    if logger.handlers:
+        return logger
+
+    log_dir = SettingsLoader().get("log_dir", "logs")
+    project_root = Path(__file__).resolve().parents[1]
+    log_path = project_root / log_dir / "parser.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    handler = RotatingFileHandler(
+        log_path,
+        maxBytes=_MAX_BYTES,
+        backupCount=_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT))
+    logger.addHandler(handler)
+
+    return logger

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
-
 from valutatrade_hub.core.exceptions import ApiRequestError
+from valutatrade_hub.logging_config import setup_parser_logging
 from valutatrade_hub.parser_service.api_clients import (
     BaseApiClient,
     CoinGeckoClient,
@@ -13,7 +12,7 @@ from valutatrade_hub.parser_service.api_clients import (
 from valutatrade_hub.parser_service.config import ParserConfig
 from valutatrade_hub.parser_service.storage import RatesStorage
 
-logger = logging.getLogger(__name__)
+logger = setup_parser_logging()
 
 
 class RatesUpdater:
