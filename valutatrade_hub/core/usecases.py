@@ -255,7 +255,8 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     wallet = portfolio.get_wallet(code)
     if wallet is None:
         raise InsufficientFundsError(
-            f"У вас нет кошелька '{code}'. Он создаётся автоматически при первой покупке."
+            f"У вас нет кошелька '{code}'. "
+            "Добавьте валюту: она создаётся автоматически при первой покупке."
         )
 
     before = wallet.balance
