@@ -5,11 +5,20 @@ from __future__ import annotations
 import shlex
 
 from valutatrade_hub.core import usecases
+from valutatrade_hub.core.currencies import get_currency
 from valutatrade_hub.core.exceptions import (
     ApiRequestError,
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
+from valutatrade_hub.infra.database import DatabaseManager
+from valutatrade_hub.parser_service.api_clients import (
+    CoinGeckoClient,
+    ExchangeRateApiClient,
+)
+from valutatrade_hub.parser_service.config import ParserConfig
+from valutatrade_hub.parser_service.storage import RatesStorage
+from valutatrade_hub.parser_service.updater import RatesUpdater
 
 # current_user — сессия. Область видимости — модуль, потому что
 # функции-команды вызываются диспетчером и должны видеть сессию.
@@ -26,6 +35,8 @@ def _print_help() -> None:
     print("  get-rate --from <code> --to <code>")
     print("  help")
     print("  exit / quit")
+    print(" update-rates [--source coingecko|exchangerate]")
+    print(" show-rates [--currency CODE] [--top N] [--base CODE]")
 
 
 def _parse_flags(args: list[str]) -> dict[str, str]:
@@ -247,6 +258,106 @@ def _cmd_sell(args: list[str]) -> None:
     print(f"Оценочная выручка: {_fmt_usd(result['estimated_value'])} USD")
 
 
+def _cmd_update_rates(args: list[str]) -> None:
+    flags = _parse_flags(args)
+    source = flags.get("source", "").lower()
+
+    config = ParserConfig()
+    storage = RatesStorage(config)
+
+    clients = []
+    if source in ("", "all"):
+        clients = [CoinGeckoClient(config), ExchangeRateApiClient(config)]
+    elif source == "coingecko":
+        clients = [CoinGeckoClient(config)]
+    elif source == "exchangerate":
+        clients = [ExchangeRateApiClient(config)]
+    else:
+        print("Неизвестный источник. Доступны: coingecko, exchangerate.")
+        return
+
+    updater = RatesUpdater(config=config, clients=clients, storage=storage)
+
+    print("INFO: Starting rates update...")
+
+    try:
+        updated_counts = updater.run_update()
+    except ApiRequestError as exc:
+        print(f"ERROR: {exc}")
+        print("Update completed with errors. Check logs/parser.log for details.")
+        return
+
+    total = sum(updated_counts.values())
+
+    if not total:
+        print("Update completed with errors. Check logs/parser.log for details.")
+        return
+
+    print(f"Update successful. Total rates updated: {total}.")
+
+
+def _cmd_show_rates(args: list[str]) -> None:
+    flags = _parse_flags(args)
+    currency = flags.get("currency", "").upper()
+    top_raw = flags.get("top")
+    base = flags.get("base", "USD").upper()
+
+    rates_doc = DatabaseManager().read("rates.json", default=None)
+
+    if not rates_doc or not rates_doc.get("pairs"):
+        print("Локальный кеш курсов пуст. Выполните 'update-rates', чтобы загрузить данные.")
+        return
+
+    pairs = rates_doc["pairs"]
+
+    try:
+        get_currency(base)
+    except CurrencyNotFoundError as exc:
+        print(exc)
+        return
+
+    base_rate = 1.0 if base == "USD" else pairs.get(f"{base}_USD", {}).get("rate")
+
+    if base_rate is None or base_rate == 0:
+        print(f"Курс для базовой валюты '{base}' не найден в кеше.")
+        return
+
+    filtered = []
+
+    for pair, info in pairs.items():
+        from_code, to_code = pair.split("_", 1)
+
+        if currency and currency not in (from_code, to_code):
+            continue
+
+        rate = info["rate"]
+
+        if base != "USD":
+            rate = rate / base_rate
+
+        filtered.append((pair, rate, info["updated_at"]))
+
+    if not filtered:
+        print(f"Курс для '{currency}' не найден в кеше.")
+        return
+
+    if top_raw is not None:
+        try:
+            top = int(top_raw)
+        except ValueError:
+            print("'top' должен быть целым числом")
+            return
+
+        filtered = sorted(filtered, key=lambda item: item[1], reverse=True)[:top]
+    else:
+        filtered.sort(key=lambda item: item[0])
+
+    print(f"Rates from cache (updated at {rates_doc.get('last_refresh', '')}):")
+
+    for pair, rate, _updated_at in filtered:
+        print(f"- {pair}: {_fmt_rate_auto(rate)}")
+
+
 def _dispatch(command: str, args: list[str]) -> bool:
     if command in ("exit", "quit"):
         return False
@@ -271,6 +382,12 @@ def _dispatch(command: str, args: list[str]) -> bool:
         return True
     if command == "sell":
         _cmd_sell(args)
+        return True
+    if command == "update-rates":
+        _cmd_update_rates(args)
+        return True
+    if command == "show-rates":
+        _cmd_show_rates(args)
         return True
 
     print(f"Неизвестная команда: '{command}'. Введите 'help'.")
