@@ -63,15 +63,29 @@ def _fmt_balance(value: float) -> str:
 
 
 def _fmt_usd(value: float) -> str:
-    """Форматирует денежную сумму: разделители тысяч и два знака."""
+    """Форматирует денежную сумму: разделители тысяч и два знака («ИТОГО: 3,329.00»)."""
     return f"{value:,.2f}"
+
+
+def _fmt_wallet_value(value: float) -> str:
+    """Форматирует стоимость кошелька в строке портфеля.
+
+    Отдельная функция, потому что в примере ТЗ строки кошельков печатаются
+    без разделителей разрядов («- BTC: 0.0500  → 2965.00 USD»), а итог — с
+    разделителями.
+    """
+    return f"{value:.2f}"
 
 
 def _fmt_rate_auto(value: float) -> str:
-    """Форматирует курс: мелкие значения — с восемью знаками, крупные — с двумя."""
+    """Форматирует курс: мелкие значения — с восемью знаками, крупные — с двумя.
+
+    Разделителей разрядов нет: так в примерах ТЗ («59300.00 USD/BTC»,
+    «59337.21»). У денег разделители есть — см. _fmt_usd и «ИТОГО: 3,329.00».
+    """
     if value < 1:
         return f"{value:.8f}"
-    return f"{value:,.2f}"
+    return f"{value:.2f}"
 
 
 def _print_stale_hint(result: dict) -> None:
@@ -194,7 +208,7 @@ def _cmd_show_portfolio(args: list[str]) -> None:
     for w in data["wallets"]:
         print(
             f"- {w['currency_code']}: {_fmt_balance(w['balance'])}  "
-            f"→ {_fmt_usd(w['value'])} {data['base']}"
+            f"→ {_fmt_wallet_value(w['value'])} {data['base']}"
         )
     print("-" * 33)
     print(f"ИТОГО: {_fmt_usd(data['total'])} {data['base']}")

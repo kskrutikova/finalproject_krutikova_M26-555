@@ -141,7 +141,7 @@ def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float
     from_usd = _rate_to_usd(from_code, rates)
     to_usd = _rate_to_usd(to_code, rates)
     if from_usd is None or to_usd is None or to_usd == 0:
-        raise ApiRequestError(f"Курс {from_code}→{to_code} недоступен. Повторите попытку позже")
+        raise ApiRequestError(f"Курс {from_code}→{to_code} недоступен. Повторите попытку позже.")
     return amount * from_usd / to_usd
 
 
