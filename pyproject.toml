@@ -39,3 +39,4 @@ data_dir = "data"
 rates_ttl_seconds = 300
 default_base_currency = "USD"
 log_dir = "logs"
+log_level = "INFO"

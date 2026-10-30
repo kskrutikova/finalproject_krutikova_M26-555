@@ -73,6 +73,12 @@ def _fmt_rate_auto(value: float) -> str:
     return f"{value:.2f}"
 
 
+def _print_stale_hint(result: dict) -> None:
+    """Предупреждает, что кеш курсов устарел, и предлагает update-rates (ТЗ 4.4)."""
+    if result.get("stale"):
+        print("Внимание: курсы в кеше устарели. Выполните update-rates, чтобы обновить их.")
+
+
 def _cmd_register(args: list[str]) -> None:
     """Команда register: создает пользователя (ТЗ 2.2, п. 1)."""
     flags = _parse_flags(args)
@@ -141,6 +147,7 @@ def _cmd_get_rate(args: list[str]) -> None:
         f"Обратный курс {result['to_code']}→{result['from_code']}: "
         f"{_fmt_rate_auto(result['reverse_rate'])}"
     )
+    _print_stale_hint(result)
 
 
 def _cmd_show_portfolio(args: list[str]) -> None:
@@ -151,7 +158,7 @@ def _cmd_show_portfolio(args: list[str]) -> None:
         return
 
     flags = _parse_flags(args)
-    base = flags.get("base", "USD")
+    base = flags.get("base", usecases.DEFAULT_BASE)
 
     try:
         data = usecases.show_portfolio(
@@ -177,6 +184,7 @@ def _cmd_show_portfolio(args: list[str]) -> None:
         )
     print("-" * 33)
     print(f"ИТОГО: {_fmt_usd(data['total'])} {data['base']}")
+    _print_stale_hint(data)
 
 
 def _cmd_buy(args: list[str]) -> None:
@@ -219,7 +227,8 @@ def _cmd_buy(args: list[str]) -> None:
         f"- {result['currency_code']}: было {_fmt_balance(result['before'])} "
         f"→ стало {_fmt_balance(result['after'])}"
     )
-    print(f"Оценочная стоимость покупки: {_fmt_usd(result['estimated_value'])} USD")
+    print(f"Оценочная стоимость покупки: {_fmt_usd(result['estimated_value'])} {result['base']}")
+    _print_stale_hint(result)
 
 
 def _cmd_sell(args: list[str]) -> None:
@@ -265,7 +274,8 @@ def _cmd_sell(args: list[str]) -> None:
         f"- {result['currency_code']}: было {_fmt_balance(result['before'])} "
         f"→ стало {_fmt_balance(result['after'])}"
     )
-    print(f"Оценочная выручка: {_fmt_usd(result['estimated_value'])} USD")
+    print(f"Оценочная выручка: {_fmt_usd(result['estimated_value'])} {result['base']}")
+    _print_stale_hint(result)
 
 
 def _cmd_update_rates(args: list[str]) -> None:

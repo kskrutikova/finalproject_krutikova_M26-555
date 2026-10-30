@@ -23,7 +23,16 @@ from valutatrade_hub.infra.settings import SettingsLoader
 _USERS_FILE = "users.json"
 _PORTFOLIOS_FILE = "portfolios.json"
 _RATES_FILE = "rates.json"
-_DEFAULT_BASE = "USD"
+
+# Значения по умолчанию, если ключа нет в [tool.valutatrade] (п. 3.3).
+DEFAULT_BASE = SettingsLoader().get("default_base_currency", "USD")
+_RATES_TTL_SECONDS = 300
+
+# Базовая валюта пар в rates.json: Parser Service пишет курсы вида X_USD (ТЗ 4.4).
+_RATES_BASE = "USD"
+
+# Источник курсов, когда кеш заполнен фиктивной таблицей, а не Parser Service.
+_STUB_SOURCE = "stub"
 
 
 def _read_users() -> list[dict]:
@@ -66,38 +75,52 @@ def _save_portfolio_record(record: dict) -> None:
     _write_portfolios(portfolios)
 
 
-def _load_or_refresh_rates() -> dict[str, Any]:
-    """Возвращает кеш курсов из data/rates.json, обновляя его при устаревании.
-
-    Свежесть проверяется по TTL из SettingsLoader (rates_ttl_seconds).
-    """
-    db = DatabaseManager()
-    ttl = SettingsLoader().get("rates_ttl_seconds", 300)
-    cached = db.read(_RATES_FILE, default=None)
-
-    if cached is not None and "last_refresh" in cached:
-        try:
-            refreshed = datetime.fromisoformat(cached["last_refresh"])
-            if refreshed.tzinfo is None:
-                refreshed = refreshed.replace(tzinfo=UTC)
-            age = (datetime.now(UTC) - refreshed).total_seconds()
-            if age <= ttl:
-                return cached
-        except ValueError:
-            pass  # битая метка — считаем кеш устаревшим
-
-    # Кеш пуст или устарел — обновляем из заглушки EXCHANGE_RATES.
+def _stub_rates_doc() -> dict[str, Any]:
+    """Возвращает снимок курсов из фиктивной таблицы EXCHANGE_RATES (ТЗ 2.2)."""
     if not EXCHANGE_RATES:
-        raise ApiRequestError("Курсы недоступны: заглушка пуста")
+        raise ApiRequestError("Курсы недоступны: фиктивная таблица пуста")
 
     now = datetime.now(UTC).isoformat()
     pairs = {
-        key: {"rate": rate, "updated_at": now, "source": "stub"}
+        key: {"rate": rate, "updated_at": now, "source": _STUB_SOURCE}
         for key, rate in EXCHANGE_RATES.items()
     }
-    fresh = {"pairs": pairs, "last_refresh": now}
-    db.write(_RATES_FILE, fresh)
-    return fresh
+    return {"pairs": pairs, "last_refresh": now}
+
+
+def _cache_age_seconds(rates_doc: dict[str, Any]) -> float | None:
+    """Возвращает возраст кеша в секундах; None, если метка времени не читается."""
+    stamp = rates_doc.get("last_refresh")
+    if not stamp:
+        return None
+    try:
+        refreshed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    if refreshed.tzinfo is None:
+        refreshed = refreshed.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - refreshed).total_seconds()
+
+
+def _load_rates() -> tuple[dict[str, Any], bool]:
+    """Читает кеш курсов и проверяет его свежесть по TTL из SettingsLoader.
+
+    Пустой кеш заполняется фиктивной таблицей (ТЗ 2.2). Устаревший кеш не
+    перезаписывается: значения в нем мог сохранить Parser Service, поэтому
+    курс возвращается как есть, а второй результат говорит «данные устарели»
+    (ТЗ 4.4: Core честно сообщает об этом и предлагает обновить).
+    """
+    db = DatabaseManager()
+    rates_doc = db.read(_RATES_FILE, default=None)
+
+    if not rates_doc or not rates_doc.get("pairs"):
+        fresh = _stub_rates_doc()
+        db.write(_RATES_FILE, fresh)
+        return fresh, False
+
+    ttl = SettingsLoader().get("rates_ttl_seconds", _RATES_TTL_SECONDS)
+    age = _cache_age_seconds(rates_doc)
+    return rates_doc, age is None or age > ttl
 
 
 def _flat_rates(rates_doc: dict[str, Any]) -> dict[str, float]:
@@ -107,14 +130,14 @@ def _flat_rates(rates_doc: dict[str, Any]) -> dict[str, float]:
 
 
 def _rate_to_usd(code: str, rates: dict[str, float]) -> float | None:
-    """Возвращает курс валюты к USD по парам X_USD; для USD это 1.0."""
-    if code == _DEFAULT_BASE:
+    """Возвращает курс валюты к базе кеша (USD) по парам X_USD; для самой базы это 1.0."""
+    if code == _RATES_BASE:
         return 1.0
-    return rates.get(f"{code}_{_DEFAULT_BASE}")
+    return rates.get(f"{code}_{_RATES_BASE}")
 
 
 def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float]) -> float:
-    """Конвертировать amount из from_code в to_code через USD."""
+    """Конвертировать amount из from_code в to_code через базовую валюту кеша."""
     from_usd = _rate_to_usd(from_code, rates)
     to_usd = _rate_to_usd(to_code, rates)
     if from_usd is None or to_usd is None or to_usd == 0:
@@ -122,11 +145,15 @@ def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float
     return amount * from_usd / to_usd
 
 
-def _get_rate_value(from_code: str, to_code: str) -> tuple[float, str]:
-    """Курс from→to и метка времени обновления кеша (ТЗ 2.2, п. 6)."""
-    doc = _load_or_refresh_rates()
+def _get_rate_value(from_code: str, to_code: str) -> tuple[float, str, bool]:
+    """Курс from→to, метка обновления кеша и признак того, что кеш устарел.
+
+    ТЗ 2.2, п. 6 и ТЗ 4.4: устаревший кеш не затирается, а возвращается
+    с предупреждением, чтобы Core не портил данные Parser Service.
+    """
+    doc, stale = _load_rates()
     rate = _convert(1.0, from_code, to_code, _flat_rates(doc))
-    return rate, doc.get("last_refresh", "")
+    return rate, doc.get("last_refresh", ""), stale
 
 
 # ----- пользователи -----
@@ -178,7 +205,7 @@ def login(username: str, password: str) -> User:
 def show_portfolio(
     user_id: int,
     username: str,
-    base_currency: str = _DEFAULT_BASE,
+    base_currency: str = DEFAULT_BASE,
 ) -> dict[str, Any]:
     """Собрать данные портфеля для печати (раздел 2.2).
 
@@ -189,7 +216,7 @@ def show_portfolio(
     record = _find_portfolio_record(user_id)
     portfolio = Portfolio.from_dict(record)
 
-    rates_doc = _load_or_refresh_rates()
+    rates_doc, stale = _load_rates()
     flat = _flat_rates(rates_doc)
     total = portfolio.get_total_value(base_currency=base_currency, rates=flat)
 
@@ -203,6 +230,7 @@ def show_portfolio(
         "base": base_currency.upper(),
         "wallets": wallets_info,
         "total": total,
+        "stale": stale,
     }
 
 
@@ -218,7 +246,7 @@ def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     code = validate_currency_code(currency_code)
     value = validate_amount(amount)
 
-    rate, _ = _get_rate_value(code, _DEFAULT_BASE)
+    rate, _, stale = _get_rate_value(code, DEFAULT_BASE)
 
     record = _find_portfolio_record(user_id)
     portfolio = Portfolio.from_dict(record)
@@ -233,10 +261,11 @@ def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
         "currency_code": code,
         "amount": value,
         "rate": rate,
-        "base": _DEFAULT_BASE,
+        "base": DEFAULT_BASE,
         "before": before,
         "after": after,
         "estimated_value": value * rate,
+        "stale": stale,
     }
 
 
@@ -246,7 +275,7 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     code = validate_currency_code(currency_code)
     value = validate_amount(amount)
 
-    rate, _ = _get_rate_value(code, _DEFAULT_BASE)
+    rate, _, stale = _get_rate_value(code, DEFAULT_BASE)
 
     record = _find_portfolio_record(user_id)
     portfolio = Portfolio.from_dict(record)
@@ -266,19 +295,23 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
         "currency_code": code,
         "amount": value,
         "rate": rate,
-        "base": _DEFAULT_BASE,
+        "base": DEFAULT_BASE,
         "before": before,
         "after": after,
         "estimated_value": value * rate,
+        "stale": stale,
     }
 
 
 def get_rate(from_code: str, to_code: str) -> dict[str, Any]:
-    """Получить курс и обратный курс (ТЗ 2.2)."""
+    """Получить курс и обратный курс (ТЗ 2.2).
+
+    Обратный курс считается из неокругленного прямого (ответ преподавателя №3).
+    """
     from_norm = validate_currency_code(from_code)
     to_norm = validate_currency_code(to_code)
 
-    rate, updated = _get_rate_value(from_norm, to_norm)
+    rate, updated, stale = _get_rate_value(from_norm, to_norm)
     reverse = 1.0 / rate if rate else 0.0
 
     return {
@@ -287,4 +320,5 @@ def get_rate(from_code: str, to_code: str) -> dict[str, Any]:
         "rate": rate,
         "reverse_rate": reverse,
         "updated_at": updated,
+        "stale": stale,
     }
