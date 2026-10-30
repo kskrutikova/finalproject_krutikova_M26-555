@@ -11,6 +11,12 @@ from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class DatabaseManager:
+    """Синглтон - абстракция над JSON-хранилищем data/ (п. 3.3).
+
+    Синглтон сделан через __new__: приложение получает один путь к data/
+    и один способ чтения/записи без отдельного метакласса.
+    """
+
     _instance: DatabaseManager | None = None
 
     def __new__(cls) -> DatabaseManager:
@@ -20,16 +26,18 @@ class DatabaseManager:
         return cls._instance
 
     def _init_paths(self) -> None:
+        """Определяет каталог данных из конфигурации SettingsLoader."""
         data_dir = SettingsLoader().get("data_dir", "data")
         # Путь считаем относительно корня проекта (там, где pyproject.toml).
         project_root = Path(__file__).resolve().parents[2]
         self._data_dir = project_root / data_dir
 
     def _path(self, filename: str) -> Path:
+        """Возвращает полный путь к файлу в каталоге данных."""
         return self._data_dir / filename
 
     def read(self, filename: str, default: Any = None) -> Any:
-
+        """Читает JSON-файл хранилища; если файла нет — возвращает default."""
         path = self._path(filename)
         if not path.exists():
             return default
@@ -37,6 +45,7 @@ class DatabaseManager:
             return json.load(f)
 
     def write(self, filename: str, data: Any) -> None:
+        """Атомарно записывает JSON: временный файл --> os.replace."""
         self._data_dir.mkdir(parents=True, exist_ok=True)
         path = self._path(filename)
         tmp_path = path.with_suffix(path.suffix + ".tmp")

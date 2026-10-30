@@ -14,10 +14,17 @@ _PYPROJECT_PATH = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
 
 class SettingsLoader:
+    """Синглтон конфигурации проекта (п. 3.3).
+
+    Синглтон сделан через __new__ экземпляр создается один раз,
+    поэтому повторные вызовы SettingsLoader() в модулях возвращают
+    уже загруженную конфигурацию.
+    """
+
     _instance: SettingsLoader | None = None
 
     def __new__(cls) -> SettingsLoader:
-        # Если экземпляр уже создан - возвращаем его,
+        # Если экземпляр уже создан, то возвращаем его,
         # повторной инициализации не будет.
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -27,10 +34,12 @@ class SettingsLoader:
         return cls._instance
 
     def reload(self) -> None:
+        """Заново читает конфигурацию из pyproject.toml."""
         with _PYPROJECT_PATH.open("rb") as f:
             data = tomllib.load(f)
         self._config = data.get("tool", {}).get("valutatrade", {})
         self._loaded = True
 
     def get(self, key: str, default: Any = None) -> Any:
+        """Возвращает параметр конфигурации или default, если ключа нет."""
         return self._config.get(key, default)

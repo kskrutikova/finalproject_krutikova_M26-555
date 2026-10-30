@@ -18,9 +18,11 @@ class RatesStorage:
         self._config = config
 
     def _path(self, file_path: str) -> Path:
+        """Возвращает путь к файлу курсов."""
         return Path(file_path)
 
     def _atomic_write(self, path: Path, data: Any) -> None:
+        """Пишет JSON атомарно: временный файл → os.replace (ТЗ 4.4, п. 1)."""
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_suffix(path.suffix + ".tmp")
 

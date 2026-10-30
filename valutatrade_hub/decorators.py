@@ -1,5 +1,7 @@
-"""Декоратор @log_action — логирование доменных операций
-Пишет INFO-строку в logs/actions.log через логгер из logging_config."""
+"""Декоратор @log_action - логирование доменных операций (п. 3.4).
+
+Пишет INFO-строку в logs/actions.log через логгер из logging_config.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ _FIELD_ORDER = ("user_id", "username", "currency_code", "amount", "rate", "base"
 
 
 def _format_field(name: str, value: Any) -> str:
+    """Форматирует одно поле логи, строки в кавычках, суммы с точностью."""
     if name == "amount":
         try:
             return f"{name}={float(value):.4f}"
@@ -32,6 +35,13 @@ def _format_field(name: str, value: Any) -> str:
 
 
 def log_action(action: str, verbose: bool = False) -> Callable:
+    """Логирует доменную операцию на уровне INFO и не глотает исключения.
+
+    Args:
+        action: метка операции (BUY, SELL, REGISTER, LOGIN).
+        verbose: добавлять в лог состояние кошелька «было --> стало».
+    """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:

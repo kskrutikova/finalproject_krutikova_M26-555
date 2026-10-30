@@ -1,4 +1,4 @@
-"""Вспомогательные функции: валидации (п. 2.2 и 3.5)"""
+"""Вспомогательные функции: валидации (п. 2.2 и 3.5)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from valutatrade_hub.core.currencies import get_currency
 
 
 def validate_amount(amount: float) -> float:
+    """Проверяет, что amount — положительное число, и возвращает его как float."""
     try:
         value = float(amount)
     except (TypeError, ValueError) as exc:
@@ -18,6 +19,7 @@ def validate_amount(amount: float) -> float:
 
 
 def validate_currency_code(code: str) -> str:
+    """Проверяет код валюты через реестр и возвращает его в верхнем регистре."""
     if not isinstance(code, str) or not code:
         raise ValueError("Код валюты не может быть пустым")
 

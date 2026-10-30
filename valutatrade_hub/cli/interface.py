@@ -26,6 +26,7 @@ _current_user = None
 
 
 def _print_help() -> None:
+    """Печатает список доступных команд."""
     print("Доступные команды:")
     print("  register --username <name> --password <pw>")
     print("  login --username <name> --password <pw>")
@@ -40,6 +41,7 @@ def _print_help() -> None:
 
 
 def _parse_flags(args: list[str]) -> dict[str, str]:
+    """Разбирает аргументы вида --key value в словарь {key: value}."""
     result: dict[str, str] = {}
     i = 0
     while i < len(args):
@@ -55,20 +57,24 @@ def _parse_flags(args: list[str]) -> dict[str, str]:
 
 
 def _fmt_balance(value: float) -> str:
+    """Форматирует баланс кошелька для таблицы портфеля."""
     return f"{value:.4f}"
 
 
 def _fmt_usd(value: float) -> str:
+    """Форматирует денежную сумму: разделители тысяч и два знака."""
     return f"{value:,.2f}"
 
 
 def _fmt_rate_auto(value: float) -> str:
+    """Форматирует курс: мелкие значения — с восемью знаками, крупные — с двумя."""
     if value < 1:
         return f"{value:.8f}"
     return f"{value:.2f}"
 
 
 def _cmd_register(args: list[str]) -> None:
+    """Команда register: создаёт пользователя (ТЗ 2.2, п. 1)."""
     global _current_user
     flags = _parse_flags(args)
     username = flags.get("username")
@@ -90,6 +96,7 @@ def _cmd_register(args: list[str]) -> None:
 
 
 def _cmd_login(args: list[str]) -> None:
+    """Команда login: проверяет пароль и запоминает пользователя в сессии CLI."""
     global _current_user
     flags = _parse_flags(args)
     username = flags.get("username")
@@ -109,6 +116,7 @@ def _cmd_login(args: list[str]) -> None:
 
 
 def _cmd_get_rate(args: list[str]) -> None:
+    """Команда get-rate: курс одной валюты к другой и обратный курс (ТЗ 2.2, п. 6)."""
     flags = _parse_flags(args)
     from_code = flags.get("from")
     to_code = flags.get("to")
@@ -137,6 +145,7 @@ def _cmd_get_rate(args: list[str]) -> None:
 
 
 def _cmd_show_portfolio(args: list[str]) -> None:
+    """Команда show-portfolio: кошельки и итог в базовой валюте (ТЗ 2.2, п. 3)."""
     global _current_user
     if _current_user is None:
         print("Сначала выполните login")
@@ -172,6 +181,7 @@ def _cmd_show_portfolio(args: list[str]) -> None:
 
 
 def _cmd_buy(args: list[str]) -> None:
+    """Команда buy: покупка валюты залогиненным пользователем (ТЗ 2.2, п. 4)."""
     global _current_user
     if _current_user is None:
         print("Сначала выполните login")
@@ -214,6 +224,7 @@ def _cmd_buy(args: list[str]) -> None:
 
 
 def _cmd_sell(args: list[str]) -> None:
+    """Команда sell: продажа валюты с проверкой кошелька и средств (ТЗ 2.2, п. 5)."""
     global _current_user
     if _current_user is None:
         print("Сначала выполните login")
@@ -259,6 +270,7 @@ def _cmd_sell(args: list[str]) -> None:
 
 
 def _cmd_update_rates(args: list[str]) -> None:
+    """Команда update-rates: немедленное обновление курсов Parser Service (ТЗ 4.4)."""
     flags = _parse_flags(args)
     source = flags.get("source", "").lower()
 
@@ -297,6 +309,7 @@ def _cmd_update_rates(args: list[str]) -> None:
 
 
 def _cmd_show_rates(args: list[str]) -> None:
+    """Команда show-rates: курсы из локального кеша с фильтрами (ТЗ 4.4)."""
     flags = _parse_flags(args)
     currency = flags.get("currency", "").upper()
     top_raw = flags.get("top")
@@ -359,6 +372,7 @@ def _cmd_show_rates(args: list[str]) -> None:
 
 
 def _dispatch(command: str, args: list[str]) -> bool:
+    """Вызывает команду по имени. Возвращает False, если пользователь вышел."""
     if command in ("exit", "quit"):
         return False
     if command == "help":
@@ -395,6 +409,7 @@ def _dispatch(command: str, args: list[str]) -> bool:
 
 
 def run() -> None:
+    """Главный цикл CLI: читает строки команд и передаёт их диспетчеру."""
     print("ValutaTrade Hub. Введите 'help' для списка команд.")
     while True:
         try:
@@ -419,5 +434,5 @@ def run() -> None:
             if not _dispatch(command, args):
                 break
         except Exception as exc:  # noqa: BLE001
-            # Точечная обработка — в блоках 2 и 3. Здесь — общий предохранитель.
+            # Точечная обработка в блоках 2 и 3. Здесь общий предохранитель.
             print(f"Ошибка: {exc}")

@@ -17,32 +17,37 @@ from valutatrade_hub.decorators import log_action
 from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.infra.settings import SettingsLoader
 
+# ----- внутренние хелперы хранилища -----
+
+# Имена файлов хранилища (читаются/пишутся через DatabaseManager).
 _USERS_FILE = "users.json"
 _PORTFOLIOS_FILE = "portfolios.json"
 _RATES_FILE = "rates.json"
 _DEFAULT_BASE = "USD"
 
 
-# ----- внутренние хелперы -----
-
-
 def _read_users() -> list[dict]:
+    """Возвращает список записей пользователей из data/users.json."""
     return DatabaseManager().read(_USERS_FILE, default=[])
 
 
 def _write_users(users: list[dict]) -> None:
+    """Сохраняет список пользователей в data/users.json."""
     DatabaseManager().write(_USERS_FILE, users)
 
 
 def _read_portfolios() -> list[dict]:
+    """Возвращает список записей портфелей из data/portfolios.json."""
     return DatabaseManager().read(_PORTFOLIOS_FILE, default=[])
 
 
 def _write_portfolios(portfolios: list[dict]) -> None:
+    """Сохраняет список портфелей в data/portfolios.json."""
     DatabaseManager().write(_PORTFOLIOS_FILE, portfolios)
 
 
 def _find_portfolio_record(user_id: int) -> dict:
+    """Возвращает запись портфеля пользователя; если ее нет — бросает ValueError."""
     record = next((p for p in _read_portfolios() if p.get("user_id") == user_id), None)
     if record is None:
         raise ValueError(f"Портфель пользователя id={user_id} не найден")
@@ -50,6 +55,7 @@ def _find_portfolio_record(user_id: int) -> dict:
 
 
 def _save_portfolio_record(record: dict) -> None:
+    """Обновляет запись портфеля в data/portfolios.json (или добавляет новую)."""
     portfolios = _read_portfolios()
     for i, p in enumerate(portfolios):
         if p.get("user_id") == record["user_id"]:
@@ -61,6 +67,10 @@ def _save_portfolio_record(record: dict) -> None:
 
 
 def _load_or_refresh_rates() -> dict[str, Any]:
+    """Возвращает кеш курсов из data/rates.json, обновляя его при устаревании.
+
+    Свежесть проверяется по TTL из SettingsLoader (rates_ttl_seconds).
+    """
     db = DatabaseManager()
     ttl = SettingsLoader().get("rates_ttl_seconds", 300)
     cached = db.read(_RATES_FILE, default=None)
@@ -149,7 +159,7 @@ def register(username: str, password: str) -> User:
 
 
 def login(username: str, password: str) -> User:
-    """Проверить имя и пароль. Вернуть User или бросить ValueError"""
+    """Проверить имя и пароль. Вернуть User или бросить ValueError."""
     users = _read_users()
     record = next((u for u in users if u.get("username") == username), None)
     if record is None:
@@ -170,7 +180,8 @@ def show_portfolio(
     base_currency: str = _DEFAULT_BASE,
 ) -> dict[str, Any]:
     """Собрать данные портфеля для печати (раздел 2.2).
-    Печать — в CLI. Здесь только данные.
+
+    Печать — в CLI, здесь только данные.
     """
     get_currency(base_currency)
 
@@ -214,8 +225,9 @@ def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float
 
 @log_action(action="BUY", verbose=True)
 def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
-    """Купить валюту (упрощенная модель)
-    Кошелек создаётся при отсутствии. USD не списываем.
+    """Купить валюту (упрощенная модель, см. README).
+
+    Кошелек создается при отсутствии, USD не списывается.
     """
     code = validate_currency_code(currency_code)
     value = validate_amount(amount)
@@ -258,7 +270,7 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     if wallet is None:
         raise InsufficientFundsError(
             f"У вас нет кошелька '{code}'. "
-            "Добавьте валюту: она создаётся автоматически при первой покупке."
+            "Добавьте валюту: она создается автоматически при первой покупке."
         )
 
     before = wallet.balance

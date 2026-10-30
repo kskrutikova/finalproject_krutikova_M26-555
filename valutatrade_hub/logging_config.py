@@ -1,4 +1,4 @@
-"""Настройка логирования (п. 3.4)"""
+"""Настройка логирования: формат, уровень, ротация файлов (п. 3.4)."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ _BACKUP_COUNT = 3
 
 
 def setup_logging() -> logging.Logger:
+    """Возвращает логгер доменных операций logs/actions.log с ротацией."""
     logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -47,6 +48,7 @@ PARSER_LOGGER_NAME = "valutatrade_hub.parser"
 
 
 def setup_parser_logging() -> logging.Logger:
+    """Возвращает логгер Parser Service logs/parser.log с ротацией."""
     logger = logging.getLogger(PARSER_LOGGER_NAME)
     logger.setLevel(logging.INFO)
     logger.propagate = False

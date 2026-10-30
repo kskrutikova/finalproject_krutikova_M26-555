@@ -26,6 +26,7 @@ class CoinGeckoClient(BaseApiClient):
         self._config = config
 
     def fetch_rates(self) -> dict[str, float]:
+        """Запрашивает курсы криптовалют и возвращает {"BTC_USD": 59337.21, ...}."""
         crypto_ids = ",".join(
             self._config.CRYPTO_ID_MAP[code] for code in self._config.CRYPTO_CURRENCIES
         )
@@ -73,6 +74,7 @@ class ExchangeRateApiClient(BaseApiClient):
         self._config = config
 
     def fetch_rates(self) -> dict[str, float]:
+        """Запрашивает курсы фиатных валют и возвращает {"EUR_USD": 1.0786, ...}."""
         if not self._config.EXCHANGERATE_API_KEY:
             raise ApiRequestError(
                 "Не задан API-ключ ExchangeRate-API (переменная окружения EXCHANGERATE_API_KEY)"
