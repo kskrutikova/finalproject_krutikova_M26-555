@@ -1,4 +1,5 @@
 """Конфигурация проекта: Singleton SettingsLoader (п. 3.3).
+
 Загружает параметры из секции [tool.valutatrade] в pyproject.toml.
 """
 
@@ -16,9 +17,8 @@ _PYPROJECT_PATH = Path(__file__).resolve().parents[2] / "pyproject.toml"
 class SettingsLoader:
     """Синглтон конфигурации проекта (п. 3.3).
 
-    Синглтон сделан через __new__ экземпляр создается один раз,
-    поэтому повторные вызовы SettingsLoader() в модулях возвращают
-    уже загруженную конфигурацию.
+    Способ — __new__, а не метакласс: он короче и читается прямо в классе,
+    а нам достаточно одного экземпляра на процесс.
     """
 
     _instance: SettingsLoader | None = None
@@ -28,7 +28,6 @@ class SettingsLoader:
         # повторной инициализации не будет.
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._loaded = False
             cls._instance._config: dict[str, Any] = {}
             cls._instance.reload()
         return cls._instance
@@ -38,7 +37,6 @@ class SettingsLoader:
         with _PYPROJECT_PATH.open("rb") as f:
             data = tomllib.load(f)
         self._config = data.get("tool", {}).get("valutatrade", {})
-        self._loaded = True
 
     def get(self, key: str, default: Any = None) -> Any:
         """Возвращает параметр конфигурации или default, если ключа нет."""

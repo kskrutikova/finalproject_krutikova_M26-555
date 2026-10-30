@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,12 @@ class ParserConfig:
     CRYPTO_CURRENCIES: tuple[str, ...] = ("BTC", "ETH", "SOL")
 
     # Соответствие тикеров криптовалют и ID CoinGecko.
-    CRYPTO_ID_MAP: dict[str, str] = None  # заменяется в __post_init__
+    # ClassVar: это постоянный словарь настроек, а не данные экземпляра.
+    CRYPTO_ID_MAP: ClassVar[dict[str, str]] = {
+        "BTC": "bitcoin",
+        "ETH": "ethereum",
+        "SOL": "solana",
+    }
 
     # Пути к файлам Parser Service и Core Service.
     RATES_FILE_PATH: str = "data/rates.json"
@@ -39,14 +45,3 @@ class ParserConfig:
 
     # Сетевые параметры.
     REQUEST_TIMEOUT: int = 10
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "CRYPTO_ID_MAP",
-            {
-                "BTC": "bitcoin",
-                "ETH": "ethereum",
-                "SOL": "solana",
-            },
-        )

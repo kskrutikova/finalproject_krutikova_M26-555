@@ -34,10 +34,10 @@ def _print_help() -> None:
     print("  buy --currency <code> --amount <number>")
     print("  sell --currency <code> --amount <number>")
     print("  get-rate --from <code> --to <code>")
+    print("  update-rates [--source coingecko|exchangerate]")
+    print("  show-rates [--currency CODE] [--top N] [--base CODE]")
     print("  help")
     print("  exit / quit")
-    print(" update-rates [--source coingecko|exchangerate]")
-    print(" show-rates [--currency CODE] [--top N] [--base CODE]")
 
 
 def _parse_flags(args: list[str]) -> dict[str, str]:
@@ -74,8 +74,7 @@ def _fmt_rate_auto(value: float) -> str:
 
 
 def _cmd_register(args: list[str]) -> None:
-    """Команда register: создаёт пользователя (ТЗ 2.2, п. 1)."""
-    global _current_user
+    """Команда register: создает пользователя (ТЗ 2.2, п. 1)."""
     flags = _parse_flags(args)
     username = flags.get("username")
     password = flags.get("password")
@@ -409,7 +408,7 @@ def _dispatch(command: str, args: list[str]) -> bool:
 
 
 def run() -> None:
-    """Главный цикл CLI: читает строки команд и передаёт их диспетчеру."""
+    """Главный цикл CLI: читает строки команд и передает их диспетчеру."""
     print("ValutaTrade Hub. Введите 'help' для списка команд.")
     while True:
         try:
@@ -433,6 +432,7 @@ def run() -> None:
         try:
             if not _dispatch(command, args):
                 break
-        except Exception as exc:  # noqa: BLE001
-            # Точечная обработка в блоках 2 и 3. Здесь общий предохранитель.
+        except Exception as exc:
+            # Точечная обработка в блоках команд. Здесь общий предохранитель,
+            # чтобы одна ошибка не роняла весь цикл.
             print(f"Ошибка: {exc}")

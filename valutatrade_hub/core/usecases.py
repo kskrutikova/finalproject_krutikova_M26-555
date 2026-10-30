@@ -106,26 +106,27 @@ def _flat_rates(rates_doc: dict[str, Any]) -> dict[str, float]:
     return {key: pair["rate"] for key, pair in pairs.items()}
 
 
-def _get_rate_value(from_code: str, to_code: str) -> tuple[float, str]:
-    """Курс from→to и метка времени.
+def _rate_to_usd(code: str, rates: dict[str, float]) -> float | None:
+    """Возвращает курс валюты к USD по парам X_USD; для USD это 1.0."""
+    if code == _DEFAULT_BASE:
+        return 1.0
+    return rates.get(f"{code}_{_DEFAULT_BASE}")
 
-    rates.json хранит пары X_USD. Конвертация через USD.
-    """
-    doc = _load_or_refresh_rates()
-    pairs = doc.get("pairs", {})
 
-    def _usd(code: str) -> float | None:
-        if code == _DEFAULT_BASE:
-            return 1.0
-        pair = pairs.get(f"{code}_{_DEFAULT_BASE}")
-        return pair["rate"] if pair else None
-
-    from_usd = _usd(from_code)
-    to_usd = _usd(to_code)
+def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float]) -> float:
+    """Конвертировать amount из from_code в to_code через USD."""
+    from_usd = _rate_to_usd(from_code, rates)
+    to_usd = _rate_to_usd(to_code, rates)
     if from_usd is None or to_usd is None or to_usd == 0:
         raise CurrencyNotFoundError(f"Курс {from_code}→{to_code} недоступен")
+    return amount * from_usd / to_usd
 
-    return from_usd / to_usd, doc.get("last_refresh", "")
+
+def _get_rate_value(from_code: str, to_code: str) -> tuple[float, str]:
+    """Курс from→to и метка времени обновления кеша (ТЗ 2.2, п. 6)."""
+    doc = _load_or_refresh_rates()
+    rate = _convert(1.0, from_code, to_code, _flat_rates(doc))
+    return rate, doc.get("last_refresh", "")
 
 
 # ----- пользователи -----
@@ -205,21 +206,6 @@ def show_portfolio(
     }
 
 
-def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float]) -> float:
-    """Конвертировать amount из from_code в to_code через USD."""
-
-    def _usd(code: str) -> float | None:
-        if code == _DEFAULT_BASE:
-            return 1.0
-        return rates.get(f"{code}_{_DEFAULT_BASE}")
-
-    from_usd = _usd(from_code)
-    to_usd = _usd(to_code)
-    if from_usd is None or to_usd is None or to_usd == 0:
-        raise CurrencyNotFoundError(f"Курс {from_code}→{to_code} недоступен")
-    return amount * from_usd / to_usd
-
-
 # ----- buy / sell -----
 
 
@@ -231,7 +217,6 @@ def buy(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     """
     code = validate_currency_code(currency_code)
     value = validate_amount(amount)
-    get_currency(code)
 
     rate, _ = _get_rate_value(code, _DEFAULT_BASE)
 
@@ -260,7 +245,6 @@ def sell(user_id: int, currency_code: str, amount: float) -> dict[str, Any]:
     """Продать валюту. Проверить кошелек и достаточность средств."""
     code = validate_currency_code(currency_code)
     value = validate_amount(amount)
-    get_currency(code)
 
     rate, _ = _get_rate_value(code, _DEFAULT_BASE)
 
