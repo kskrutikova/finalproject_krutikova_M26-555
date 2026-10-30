@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from valutatrade_hub.core.currencies import get_currency
-from valutatrade_hub.core.exceptions import (
-    ApiRequestError,
-    CurrencyNotFoundError,
-    InsufficientFundsError,
-)
+from valutatrade_hub.core.exceptions import ApiRequestError, InsufficientFundsError
 from valutatrade_hub.core.models import EXCHANGE_RATES, Portfolio, User
-from valutatrade_hub.core.utils import utc_timestamp, validate_amount, validate_currency_code
+from valutatrade_hub.core.utils import (
+    utc_timestamp,
+    validate_amount,
+    validate_base_currency,
+    validate_currency_code,
+)
 from valutatrade_hub.decorators import log_action
 from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.infra.settings import SettingsLoader
@@ -141,7 +141,7 @@ def _convert(amount: float, from_code: str, to_code: str, rates: dict[str, float
     from_usd = _rate_to_usd(from_code, rates)
     to_usd = _rate_to_usd(to_code, rates)
     if from_usd is None or to_usd is None or to_usd == 0:
-        raise CurrencyNotFoundError(f"Курс {from_code}→{to_code} недоступен")
+        raise ApiRequestError(f"Курс {from_code}→{to_code} недоступен. Повторите попытку позже")
     return amount * from_usd / to_usd
 
 
@@ -211,7 +211,7 @@ def show_portfolio(
 
     Печать — в CLI, здесь только данные.
     """
-    get_currency(base_currency)
+    base_currency = validate_base_currency(base_currency)
 
     record = _find_portfolio_record(user_id)
     portfolio = Portfolio.from_dict(record)

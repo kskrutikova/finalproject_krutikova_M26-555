@@ -75,3 +75,8 @@ def get_currency(code: str) -> Currency:
     if currency is None:
         raise CurrencyNotFoundError(f"Неизвестная валюта '{code}'")
     return currency
+
+
+def supported_codes() -> list[str]:
+    """Возвращает отсортированные коды валют, которые знает приложение (подсказка в CLI)."""
+    return sorted(_CURRENCIES)

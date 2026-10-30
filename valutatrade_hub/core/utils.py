@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from valutatrade_hub.core.currencies import get_currency
+from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 
 
 def utc_timestamp() -> str:
@@ -32,4 +33,19 @@ def validate_currency_code(code: str) -> str:
 
     normalized = code.upper()
     get_currency(normalized)
+    return normalized
+
+
+def validate_base_currency(code: str) -> str:
+    """Проверяет базовую валюту отчета: в ошибке называется именно она (п. 3.2)."""
+    if not isinstance(code, str) or not code:
+        raise ValueError("Базовая валюта не может быть пустой")
+
+    normalized = code.strip().upper()
+
+    try:
+        get_currency(normalized)
+    except CurrencyNotFoundError:
+        raise CurrencyNotFoundError(f"Неизвестная базовая валюта '{normalized}'") from None
+
     return normalized

@@ -5,12 +5,13 @@ from __future__ import annotations
 import shlex
 
 from valutatrade_hub.core import usecases
-from valutatrade_hub.core.currencies import get_currency
+from valutatrade_hub.core.currencies import supported_codes
 from valutatrade_hub.core.exceptions import (
     ApiRequestError,
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
+from valutatrade_hub.core.utils import validate_base_currency
 from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.parser_service.api_clients import (
     CoinGeckoClient,
@@ -70,13 +71,26 @@ def _fmt_rate_auto(value: float) -> str:
     """Форматирует курс: мелкие значения — с восемью знаками, крупные — с двумя."""
     if value < 1:
         return f"{value:.8f}"
-    return f"{value:.2f}"
+    return f"{value:,.2f}"
 
 
 def _print_stale_hint(result: dict) -> None:
     """Предупреждает, что кеш курсов устарел, и предлагает update-rates (ТЗ 4.4)."""
     if result.get("stale"):
         print("Внимание: курсы в кеше устарели. Выполните update-rates, чтобы обновить их.")
+
+
+def _print_currency_error(exc: CurrencyNotFoundError) -> None:
+    """Печатает ошибку валюты и подсказку со списком кодов (ТЗ 3.2)."""
+    print(exc)
+    print(f"Поддерживаемые коды: {', '.join(supported_codes())}")
+    print("Курс пары можно посмотреть так: get-rate --from <код> --to <код>")
+
+
+def _print_api_error(exc: ApiRequestError) -> None:
+    """Печатает ошибку источника курсов и совет повторить позже (ТЗ 3.2)."""
+    print(exc)
+    print("Проверьте доступ в интернет и выполните update-rates; подробности — в logs/parser.log.")
 
 
 def _cmd_register(args: list[str]) -> None:
@@ -132,10 +146,10 @@ def _cmd_get_rate(args: list[str]) -> None:
     try:
         result = usecases.get_rate(from_code, to_code)
     except CurrencyNotFoundError as exc:
-        print(exc)
+        _print_currency_error(exc)
         return
     except ApiRequestError as exc:
-        print(exc)
+        _print_api_error(exc)
         return
 
     print(
@@ -165,10 +179,10 @@ def _cmd_show_portfolio(args: list[str]) -> None:
             _current_user.user_id, _current_user.username, base_currency=base
         )
     except CurrencyNotFoundError as exc:
-        print(exc)
+        _print_currency_error(exc)
         return
     except ApiRequestError as exc:
-        print(exc)
+        _print_api_error(exc)
         return
 
     print(f"Портфель пользователя '{data['username']}' (база: {data['base']}):")
@@ -211,10 +225,10 @@ def _cmd_buy(args: list[str]) -> None:
         print(exc)
         return
     except CurrencyNotFoundError as exc:
-        print(exc)
+        _print_currency_error(exc)
         return
     except ApiRequestError as exc:
-        print(exc)
+        _print_api_error(exc)
         return
 
     print(
@@ -258,10 +272,10 @@ def _cmd_sell(args: list[str]) -> None:
         print(exc)
         return
     except CurrencyNotFoundError as exc:
-        print(exc)
+        _print_currency_error(exc)
         return
     except ApiRequestError as exc:
-        print(exc)
+        _print_api_error(exc)
         return
 
     print(
@@ -333,9 +347,9 @@ def _cmd_show_rates(args: list[str]) -> None:
     pairs = rates_doc["pairs"]
 
     try:
-        get_currency(base)
+        base = validate_base_currency(base)
     except CurrencyNotFoundError as exc:
-        print(exc)
+        _print_currency_error(exc)
         return
 
     base_rate = 1.0 if base == "USD" else pairs.get(f"{base}_USD", {}).get("rate")
