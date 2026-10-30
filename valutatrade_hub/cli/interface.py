@@ -328,21 +328,25 @@ def _cmd_update_rates(args: list[str]) -> None:
     updater = RatesUpdater(config=config, clients=clients, storage=storage)
 
     print("INFO: Starting rates update...")
+    report = updater.run_update()
 
-    try:
-        updated_counts = updater.run_update()
-    except ApiRequestError as exc:
-        print(f"ERROR: {exc}")
+    # Отчет по каждому источнику — как в примере вывода update-rates (ТЗ 4.4).
+    for outcome in report.outcomes:
+        if outcome.error is None:
+            print(f"INFO: Fetching from {outcome.source}... OK ({outcome.rates} rates)")
+        else:
+            print(f"ERROR: Failed to fetch from {outcome.source}: {outcome.error}")
+
+    # Курсы не записаны (ничего не пришло) либо хотя бы один источник упал.
+    if report.has_errors or report.last_refresh is None:
         print("Update completed with errors. Check logs/parser.log for details.")
         return
 
-    total = sum(updated_counts.values())
-
-    if not total:
-        print("Update completed with errors. Check logs/parser.log for details.")
-        return
-
-    print(f"Update successful. Total rates updated: {total}.")
+    print(f"INFO: Writing {report.total} rates to {config.RATES_FILE_PATH}...")
+    print(
+        f"Update successful. Total rates updated: {report.total}. "
+        f"Last refresh: {report.last_refresh}"
+    )
 
 
 def _cmd_show_rates(args: list[str]) -> None:

@@ -29,8 +29,8 @@ class RatesStorage:
         """Возвращает снимок курсов из rates.json (пустой словарь, если файла нет)."""
         return self._db.read(self._rates_file, default=None) or {}
 
-    def save_snapshot(self, rates: dict[str, float], sources: dict[str, str]) -> None:
-        """Сохраняет последние курсы в rates.json.
+    def save_snapshot(self, rates: dict[str, float], sources: dict[str, str]) -> str:
+        """Сохраняет последние курсы в rates.json и возвращает метку обновления.
 
         Курсы только что получены от API, поэтому они новее сохраненных и
         перезаписывают свою пару. Пары, которых нет в этом обновлении
@@ -48,6 +48,7 @@ class RatesStorage:
             }
 
         self._db.write(self._rates_file, {"pairs": pairs, "last_refresh": now})
+        return now
 
     def append_history(self, rates: dict[str, float], sources: dict[str, str]) -> None:
         """Добавляет замеры в историю exchange_rates.json.
