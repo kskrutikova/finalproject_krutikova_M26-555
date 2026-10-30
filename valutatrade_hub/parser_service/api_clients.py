@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from http import HTTPStatus
 from typing import Any
 
 import requests
@@ -10,16 +11,83 @@ import requests
 from valutatrade_hub.core.exceptions import ApiRequestError
 from valutatrade_hub.parser_service.config import ParserConfig
 
+# Замена секрета в текстах ошибок и логов.
+MASK = "***"
+
+
+def hide_secret(value: object, secret: str | None) -> str:
+    """Убирает секрет из текста: в логах не должно быть API-ключа (ТЗ 4.4)."""
+    message = str(value)
+    if secret:
+        message = message.replace(secret, MASK)
+    return message
+
 
 class BaseApiClient(ABC):
-    """Базовый интерфейс клиента внешнего API."""
+    """Базовый интерфейс клиента внешнего API (п. 4.2)."""
 
     # Имя источника попадает в source у курсов и в историю (примеры ТЗ 4.4).
     source_name: str = "unknown"
 
+    def __init__(self, config: ParserConfig) -> None:
+        self._config = config
+
     @abstractmethod
     def fetch_rates(self) -> dict[str, float]:
         """Вернуть курсы в формате {"BTC_USD": 59337.21, ...}."""
+
+    def _get_json(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        secret: str | None = None,
+    ) -> dict[str, Any]:
+        """Выполняет GET-запрос с таймаутом и возвращает JSON ответа.
+
+        Сообщения об ошибках — по требованиям ТЗ 4.2: 401/403 про API-ключ,
+        429 про лимит запросов, 5xx про недоступность сервиса. Сетевые сбои
+        и некорректный JSON тоже превращаются в ApiRequestError, чтобы
+        RatesUpdater видел единый тип ошибки.
+
+        secret — значение, которое не должно попасть в лог: у ExchangeRate-API
+        ключ является частью URL, а requests печатает URL в тексте исключения.
+        """
+        timeout = self._config.REQUEST_TIMEOUT
+
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+        except requests.exceptions.Timeout as exc:
+            raise ApiRequestError(
+                f"{self.source_name}: нет ответа за {timeout} с (таймаут)"
+            ) from exc
+        except requests.exceptions.ConnectionError as exc:
+            raise ApiRequestError(
+                f"{self.source_name}: нет соединения — проверьте доступ в интернет"
+            ) from exc
+        except requests.exceptions.RequestException as exc:
+            raise ApiRequestError(f"{self.source_name}: {hide_secret(exc, secret)}") from exc
+
+        status = response.status_code
+        if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+            raise ApiRequestError(f"{self.source_name}: HTTP {status}. Проверьте API-ключ")
+        if status == HTTPStatus.TOO_MANY_REQUESTS:
+            raise ApiRequestError(
+                f"{self.source_name}: HTTP {status}. Превышен лимит запросов, повторите позже"
+            )
+        if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
+            raise ApiRequestError(f"{self.source_name}: HTTP {status}. Сервис временно недоступен")
+        if status != HTTPStatus.OK:
+            raise ApiRequestError(f"{self.source_name}: неожиданный статус ответа HTTP {status}")
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ApiRequestError(f"{self.source_name} вернул некорректный JSON") from exc
+
+        if not isinstance(data, dict):
+            raise ApiRequestError(f"{self.source_name} вернул неожиданный формат ответа")
+
+        return data
 
 
 class CoinGeckoClient(BaseApiClient):
@@ -27,35 +95,19 @@ class CoinGeckoClient(BaseApiClient):
 
     source_name = "CoinGecko"
 
-    def __init__(self, config: ParserConfig) -> None:
-        self._config = config
-
     def fetch_rates(self) -> dict[str, float]:
         """Запрашивает курсы криптовалют и возвращает {"BTC_USD": 59337.21, ...}."""
         crypto_ids = ",".join(
             self._config.CRYPTO_ID_MAP[code] for code in self._config.CRYPTO_CURRENCIES
         )
 
-        url = self._config.COINGECKO_URL
-        params = {
-            "ids": crypto_ids,
-            "vs_currencies": self._config.BASE_CURRENCY.lower(),
-        }
-
-        try:
-            response = requests.get(
-                url,
-                params=params,
-                timeout=self._config.REQUEST_TIMEOUT,
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as exc:
-            raise ApiRequestError(f"Ошибка при обращении к CoinGecko: {exc}") from exc
-
-        try:
-            data: dict[str, Any] = response.json()
-        except ValueError as exc:
-            raise ApiRequestError("CoinGecko вернул некорректный JSON") from exc
+        data = self._get_json(
+            self._config.COINGECKO_URL,
+            params={
+                "ids": crypto_ids,
+                "vs_currencies": self._config.BASE_CURRENCY.lower(),
+            },
+        )
 
         base = self._config.BASE_CURRENCY.lower()
         rates: dict[str, float] = {}
@@ -65,7 +117,7 @@ class CoinGeckoClient(BaseApiClient):
             rate = data.get(coin_id, {}).get(base)
 
             if not isinstance(rate, (int, float)):
-                raise ApiRequestError(f"CoinGecko не вернул курс для {code}")
+                raise ApiRequestError(f"{self.source_name} не вернул курс для {code}")
 
             rates[f"{code}_{self._config.BASE_CURRENCY}"] = float(rate)
 
@@ -77,14 +129,11 @@ class ExchangeRateApiClient(BaseApiClient):
 
     source_name = "ExchangeRate-API"
 
-    def __init__(self, config: ParserConfig) -> None:
-        self._config = config
-
     def fetch_rates(self) -> dict[str, float]:
         """Запрашивает курсы фиатных валют и возвращает {"EUR_USD": 1.0786, ...}."""
         if not self._config.EXCHANGERATE_API_KEY:
             raise ApiRequestError(
-                "Не задан API-ключ ExchangeRate-API (переменная окружения EXCHANGERATE_API_KEY)"
+                f"Не задан API-ключ {self.source_name} (переменная окружения EXCHANGERATE_API_KEY)"
             )
 
         url = (
@@ -93,23 +142,11 @@ class ExchangeRateApiClient(BaseApiClient):
             f"{self._config.BASE_CURRENCY}"
         )
 
-        try:
-            response = requests.get(
-                url,
-                timeout=self._config.REQUEST_TIMEOUT,
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as exc:
-            raise ApiRequestError(f"Ошибка при обращении к ExchangeRate-API: {exc}") from exc
-
-        try:
-            data: dict[str, Any] = response.json()
-        except ValueError as exc:
-            raise ApiRequestError("ExchangeRate-API вернул некорректный JSON") from exc
+        data = self._get_json(url, secret=self._config.EXCHANGERATE_API_KEY)
 
         if data.get("result") != "success":
             raise ApiRequestError(
-                f"ExchangeRate-API вернул ошибку: {data.get('error-type', 'unknown')}"
+                f"{self.source_name} вернул ошибку: {data.get('error-type', 'unknown')}"
             )
 
         api_rates = data.get("conversion_rates", {})
@@ -119,7 +156,7 @@ class ExchangeRateApiClient(BaseApiClient):
             rate = api_rates.get(code)
 
             if not isinstance(rate, (int, float)):
-                raise ApiRequestError(f"ExchangeRate-API не вернул курс для {code}")
+                raise ApiRequestError(f"{self.source_name} не вернул курс для {code}")
 
             # API возвращает стоимость одной USD в валюте code,
             # поэтому для пары CODE_USD выполняем обратное преобразование.

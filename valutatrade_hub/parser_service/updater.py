@@ -45,8 +45,9 @@ class RatesUpdater:
             try:
                 rates = client.fetch_rates()
             except ApiRequestError as exc:
-                logger.error("Failed to fetch from %s: %s", source_name, exc)
-                errors.append(f"{source_name}: {exc}")
+                # В сообщении клиента уже есть имя источника.
+                logger.error("Failed to fetch rates: %s", exc)
+                errors.append(str(exc))
                 continue
 
             for pair, rate in rates.items():
