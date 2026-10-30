@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import shlex
 
+from prettytable import PrettyTable
+
 from valutatrade_hub.core import usecases
 from valutatrade_hub.core.currencies import supported_codes
 from valutatrade_hub.core.exceptions import (
@@ -370,28 +372,34 @@ def _cmd_show_rates(args: list[str]) -> None:
         _print_currency_error(exc)
         return
 
-    base_rate = 1.0 if base == "USD" else pairs.get(f"{base}_USD", {}).get("rate")
+    # В кеше курсы хранятся в базе Parser Service (BASE_CURRENCY), а не в базе
+    # вывода, поэтому пересчет и подпись пары считаем именно от нее.
+    cache_base = ParserConfig().BASE_CURRENCY
+    base_rate = 1.0 if base == cache_base else pairs.get(f"{base}_{cache_base}", {}).get("rate")
 
-    if base_rate is None or base_rate == 0:
+    if not base_rate:
         print(f"Курс для базовой валюты '{base}' не найден в кеше.")
         return
 
-    filtered = []
+    rows: list[tuple[str, float, str]] = []
 
     for pair, info in pairs.items():
-        from_code, to_code = pair.split("_", 1)
+        from_code = pair.split("_", 1)[0]
+        to_code = cache_base
+        rate = info["rate"]
 
         if currency and currency not in (from_code, to_code):
             continue
 
-        rate = info["rate"]
-
-        if base != "USD":
+        if base != cache_base:
             rate = rate / base_rate
+            # Курс пересчитан, значит и подписываем его новой базой:
+            # пара BTC_USD при --base RUB показывает курс BTC→RUB.
+            to_code = base
 
-        filtered.append((pair, rate, info["updated_at"]))
+        rows.append((f"{from_code}→{to_code}", rate, info.get("updated_at", "")))
 
-    if not filtered:
+    if not rows:
         print(f"Курс для '{currency}' не найден в кеше.")
         return
 
@@ -399,17 +407,26 @@ def _cmd_show_rates(args: list[str]) -> None:
         try:
             top = int(top_raw)
         except ValueError:
-            print("'top' должен быть целым числом")
+            top = 0
+
+        if top <= 0:
+            print("'top' должен быть положительным целым числом")
             return
 
-        filtered = sorted(filtered, key=lambda item: item[1], reverse=True)[:top]
+        rows = sorted(rows, key=lambda row: row[1], reverse=True)[:top]
     else:
-        filtered.sort(key=lambda item: item[0])
+        rows.sort(key=lambda row: row[0])
 
     print(f"Rates from cache (updated at {rates_doc.get('last_refresh', '')}):")
 
-    for pair, rate, _updated_at in filtered:
-        print(f"- {pair}: {_fmt_rate_auto(rate)}")
+    table = PrettyTable()
+    table.field_names = ["Пара", "Курс", "Обновлено"]
+    table.align["Курс"] = "r"
+
+    for pair_name, rate, updated_at in rows:
+        table.add_row([pair_name, _fmt_rate_auto(rate), updated_at])
+
+    print(table)
 
 
 def _dispatch(command: str, args: list[str]) -> bool:
