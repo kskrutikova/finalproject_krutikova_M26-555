@@ -29,7 +29,7 @@ class RatesUpdater:
         self._storage = storage
 
     def run_update(self) -> dict[str, int]:
-        """Обновить курсы. Возвращает количество курсов по каждому клиенту."""
+        """Обновить курсы. Возвращает количество курсов по каждому источнику."""
         logger.info("Starting rates update...")
 
         all_rates: dict[str, float] = {}
@@ -38,32 +38,32 @@ class RatesUpdater:
         errors: list[str] = []
 
         for client in self._clients:
-            client_name = type(client).__name__
+            source_name = client.source_name
 
-            logger.info("Fetching from %s...", client_name)
+            logger.info("Fetching from %s...", source_name)
 
             try:
                 rates = client.fetch_rates()
             except ApiRequestError as exc:
-                logger.error("Failed to fetch from %s: %s", client_name, exc)
-                errors.append(f"{client_name}: {exc}")
+                logger.error("Failed to fetch from %s: %s", source_name, exc)
+                errors.append(f"{source_name}: {exc}")
                 continue
 
             for pair, rate in rates.items():
                 all_rates[pair] = rate
-                sources[pair] = client_name
+                sources[pair] = source_name
 
-            updated_counts[client_name] = len(rates)
-            logger.info("Fetching from %s... OK (%d rates)", client_name, len(rates))
+            updated_counts[source_name] = len(rates)
+            logger.info("Fetching from %s... OK (%d rates)", source_name, len(rates))
 
         if all_rates:
-            self._storage.save_snapshot(all_rates, sources)
-            self._storage.append_history(all_rates, sources)
             logger.info(
                 "Writing %d rates to %s...",
                 len(all_rates),
                 self._config.RATES_FILE_PATH,
             )
+            self._storage.save_snapshot(all_rates, sources)
+            self._storage.append_history(all_rates, sources)
 
         if errors:
             logger.error("Update completed with errors: %s", "; ".join(errors))

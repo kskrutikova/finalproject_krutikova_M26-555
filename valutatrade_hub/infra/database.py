@@ -1,4 +1,4 @@
-"""Абстракция над JSON-хранилищем: Singleton DatabaseManager (п. 3.3, 4.4)"""
+"""Абстракция над JSON-хранилищем: Singleton DatabaseManager (п. 3.3, 4.4)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,27 @@ from pathlib import Path
 from typing import Any
 
 from valutatrade_hub.infra.settings import SettingsLoader
+
+
+def read_json(path: Path, default: Any = None) -> Any:
+    """Читает JSON-файл по пути; если файла нет — возвращает default."""
+    if not path.exists():
+        return default
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_json(path: Path, data: Any) -> None:
+    """Атомарно записывает JSON: временный файл → os.replace (ТЗ 4.4, п. 1)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+
+    with tmp_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+
+    os.replace(tmp_path, path)
 
 
 class DatabaseManager:
@@ -32,27 +53,14 @@ class DatabaseManager:
         project_root = Path(__file__).resolve().parents[2]
         self._data_dir = project_root / data_dir
 
-    def _path(self, filename: str) -> Path:
-        """Возвращает полный путь к файлу в каталоге данных."""
+    def data_path(self, filename: str) -> Path:
+        """Возвращает полный путь к файлу внутри каталога данных."""
         return self._data_dir / filename
 
     def read(self, filename: str, default: Any = None) -> Any:
         """Читает JSON-файл хранилища; если файла нет — возвращает default."""
-        path = self._path(filename)
-        if not path.exists():
-            return default
-        with path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+        return read_json(self.data_path(filename), default)
 
     def write(self, filename: str, data: Any) -> None:
-        """Атомарно записывает JSON: временный файл --> os.replace."""
-        self._data_dir.mkdir(parents=True, exist_ok=True)
-        path = self._path(filename)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-
-        with tmp_path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-
-        os.replace(tmp_path, path)
+        """Атомарно записывает JSON-файл хранилища."""
+        write_json(self.data_path(filename), data)

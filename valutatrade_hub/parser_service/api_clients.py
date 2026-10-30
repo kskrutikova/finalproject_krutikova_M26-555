@@ -14,6 +14,9 @@ from valutatrade_hub.parser_service.config import ParserConfig
 class BaseApiClient(ABC):
     """Базовый интерфейс клиента внешнего API."""
 
+    # Имя источника попадает в source у курсов и в историю (примеры ТЗ 4.4).
+    source_name: str = "unknown"
+
     @abstractmethod
     def fetch_rates(self) -> dict[str, float]:
         """Вернуть курсы в формате {"BTC_USD": 59337.21, ...}."""
@@ -21,6 +24,8 @@ class BaseApiClient(ABC):
 
 class CoinGeckoClient(BaseApiClient):
     """Клиент CoinGecko для криптовалют."""
+
+    source_name = "CoinGecko"
 
     def __init__(self, config: ParserConfig) -> None:
         self._config = config
@@ -69,6 +74,8 @@ class CoinGeckoClient(BaseApiClient):
 
 class ExchangeRateApiClient(BaseApiClient):
     """Клиент ExchangeRate-API для фиатных валют."""
+
+    source_name = "ExchangeRate-API"
 
     def __init__(self, config: ParserConfig) -> None:
         self._config = config

@@ -1,8 +1,15 @@
-"""Вспомогательные функции: валидации (п. 2.2 и 3.5)."""
+"""Вспомогательные функции: валидации и форматирование (п. 2.2 и 3.5)."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from valutatrade_hub.core.currencies import get_currency
+
+
+def utc_timestamp() -> str:
+    """Возвращает текущее время в ISO UTC (вид 2025-10-10T12:00:00Z, примеры ТЗ 4.4)."""
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def validate_amount(amount: float) -> float:

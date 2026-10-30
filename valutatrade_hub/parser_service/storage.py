@@ -1,83 +1,86 @@
-"""Хранилище курсов Parser Service (п. 4.4)."""
+"""Хранилище курсов Parser Service: rates.json и история измерений (п. 4.4)."""
 
 from __future__ import annotations
 
-import json
-import os
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from valutatrade_hub.core.utils import utc_timestamp
+from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.parser_service.config import ParserConfig
+
+# Источник для пары, если клиент его не назвал.
+_UNKNOWN_SOURCE = "unknown"
 
 
 class RatesStorage:
-    """Чтение и атомарная запись файлов курсов."""
+    """Чтение и запись файлов курсов через JSON-хранилище приложения."""
 
     def __init__(self, config: ParserConfig) -> None:
         self._config = config
+        # DatabaseManager сам ищет файлы в каталоге data из конфигурации,
+        # поэтому здесь только имена: Parser Service и Core Service обязаны
+        # видеть один и тот же rates.json при любом рабочем каталоге.
+        self._db = DatabaseManager()
+        self._rates_file = Path(config.RATES_FILE_PATH).name
+        self._history_file = Path(config.HISTORY_FILE_PATH).name
 
-    def _path(self, file_path: str) -> Path:
-        """Возвращает путь к файлу курсов."""
-        return Path(file_path)
-
-    def _atomic_write(self, path: Path, data: Any) -> None:
-        """Пишет JSON атомарно: временный файл → os.replace (ТЗ 4.4, п. 1)."""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-
-        with tmp_path.open("w", encoding="utf-8") as file:
-            json.dump(data, file, ensure_ascii=False, indent=2)
-            file.flush()
-            os.fsync(file.fileno())
-
-        os.replace(tmp_path, path)
+    def read_snapshot(self) -> dict[str, Any]:
+        """Возвращает снимок курсов из rates.json (пустой словарь, если файла нет)."""
+        return self._db.read(self._rates_file, default=None) or {}
 
     def save_snapshot(self, rates: dict[str, float], sources: dict[str, str]) -> None:
-        """Сохранить последние курсы в data/rates.json."""
-        now = datetime.now(UTC).isoformat()
+        """Сохраняет последние курсы в rates.json.
 
-        pairs = {
-            pair: {
+        Курсы только что получены от API, поэтому они новее сохраненных и
+        перезаписывают свою пару. Пары, которых нет в этом обновлении
+        (например, при update-rates --source coingecko), остаются без
+        изменений — по ТЗ «апдейт побеждает, если updated_at свежее текущего».
+        """
+        now = utc_timestamp()
+        pairs: dict[str, Any] = dict(self.read_snapshot().get("pairs", {}))
+
+        for pair, rate in rates.items():
+            pairs[pair] = {
                 "rate": rate,
                 "updated_at": now,
-                "source": sources.get(pair, "unknown"),
+                "source": sources.get(pair, _UNKNOWN_SOURCE),
             }
-            for pair, rate in rates.items()
-        }
 
-        snapshot = {
-            "pairs": pairs,
-            "last_refresh": now,
-        }
-
-        self._atomic_write(self._path(self._config.RATES_FILE_PATH), snapshot)
+        self._db.write(self._rates_file, {"pairs": pairs, "last_refresh": now})
 
     def append_history(self, rates: dict[str, float], sources: dict[str, str]) -> None:
-        """Добавить измерения в data/exchange_rates.json."""
-        history_path = self._path(self._config.HISTORY_FILE_PATH)
+        """Добавляет замеры в историю exchange_rates.json.
 
-        if history_path.exists():
-            with history_path.open("r", encoding="utf-8") as file:
-                history = json.load(file)
-        else:
+        Идентификатор записи собирается из пары и времени замера
+        (BTC_USD_2025-10-10T12:00:00Z), поэтому уже сохраненный замер
+        того же времени не удваивает историю.
+        """
+        history = self._db.read(self._history_file, default=[])
+        if not isinstance(history, list):
             history = []
 
-        now = datetime.now(UTC).isoformat()
+        known_ids = {record.get("id") for record in history}
+        timestamp = utc_timestamp()
 
         for pair, rate in rates.items():
             from_code, to_code = pair.split("_", 1)
+            record_id = f"{from_code}_{to_code}_{timestamp}"
 
-            record = {
-                "id": f"{from_code}{to_code}_{now}",
-                "from_currency": from_code,
-                "to_currency": to_code,
-                "rate": rate,
-                "timestamp": now,
-                "source": sources.get(pair, "unknown"),
-                "meta": {},
-            }
+            if record_id in known_ids:
+                continue
 
-            history.append(record)
+            history.append(
+                {
+                    "id": record_id,
+                    "from_currency": from_code,
+                    "to_currency": to_code,
+                    "rate": rate,
+                    "timestamp": timestamp,
+                    "source": sources.get(pair, _UNKNOWN_SOURCE),
+                    "meta": {},
+                }
+            )
+            known_ids.add(record_id)
 
-        self._atomic_write(history_path, history)
+        self._db.write(self._history_file, history)

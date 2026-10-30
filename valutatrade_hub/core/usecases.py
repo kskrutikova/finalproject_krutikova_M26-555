@@ -12,7 +12,7 @@ from valutatrade_hub.core.exceptions import (
     InsufficientFundsError,
 )
 from valutatrade_hub.core.models import EXCHANGE_RATES, Portfolio, User
-from valutatrade_hub.core.utils import validate_amount, validate_currency_code
+from valutatrade_hub.core.utils import utc_timestamp, validate_amount, validate_currency_code
 from valutatrade_hub.decorators import log_action
 from valutatrade_hub.infra.database import DatabaseManager
 from valutatrade_hub.infra.settings import SettingsLoader
@@ -80,7 +80,7 @@ def _stub_rates_doc() -> dict[str, Any]:
     if not EXCHANGE_RATES:
         raise ApiRequestError("Курсы недоступны: фиктивная таблица пуста")
 
-    now = datetime.now(UTC).isoformat()
+    now = utc_timestamp()
     pairs = {
         key: {"rate": rate, "updated_at": now, "source": _STUB_SOURCE}
         for key, rate in EXCHANGE_RATES.items()
